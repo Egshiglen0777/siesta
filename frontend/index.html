@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SIESTA — AI Rug Detector</title>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Syne:wght@400;700;800&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #080810;
+      --surface: #0f0f1a;
+      --border: #1e1e35;
+      --accent: #c8ff00;
+      --accent2: #ff4ecd;
+      --text: #e8e8f0;
+      --muted: #5a5a7a;
+      --red: #ff3a3a;
+      --orange: #ff8c00;
+      --yellow: #ffd600;
+      --green: #00ff88;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Space Mono', monospace;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* Noise overlay */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+      pointer-events: none;
+      z-index: 9999;
+      opacity: 0.4;
+    }
+
+    .grid-bg {
+      position: fixed;
+      inset: 0;
+      background-image: 
+        linear-gradient(rgba(200, 255, 0, 0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(200, 255, 0, 0.03) 1px, transparent 1px);
+      background-size: 40px 40px;
+      pointer-events: none;
+    }
+
+    /* HEADER */
+    header {
+      padding: 2rem 2rem 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: relative;
+      z-index: 10;
+    }
+
+    .logo {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .logo-name {
+      font-family: 'Syne', sans-serif;
+      font-weight: 800;
+      font-size: 2.5rem;
+      letter-spacing: -0.02em;
+      color: var(--accent);
+      text-shadow: 0 0 40px rgba(200, 255, 0, 0.4);
+      line-height: 1;
+    }
+
+    .logo-sub {
+      font-size: 0.65rem;
+      color: var(--muted);
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      margin-top: 2px;
+    }
+
+    .status-pill {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.7rem;
+      color: var(--muted);
+      border: 1px solid var(--border);
+      padding: 6px 12px;
+      border-radius: 100px;
+    }
+
+    .status-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 8px var(--accent);
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+
+    /* HERO */
+    .hero {
+      padding: 5rem 2rem 3rem;
+      max-width: 800px;
+      margin: 0 auto;
+      text-align: center;
+      position: relative;
+      z-index: 10;
+    }
+
+    .hero-eyebrow {
+      font-size: 0.7rem;
+      letter-spacing: 0.25em;
+      text-transform: uppercase;
+      color: var(--accent2);
+      margin-bottom: 1.5rem;
+    }
+
+    .hero h1 {
+      font-family: 'Syne', sans-serif;
+      font-weight: 800;
+      font-size: clamp(2rem, 6vw, 3.8rem);
+      line-height: 1.05;
+      letter-spacing: -0.02em;
+      margin-bottom: 1.5rem;
+    }
+
+    .hero h1 em {
+      font-style: normal;
+      color: var(--accent);
+      text-shadow: 0 0 30px rgba(200,255,0,0.3);
+    }
+
+    .hero p {
+      font-size: 0.9rem;
+      color: var(--muted);
+      line-height: 1.7;
+      max-width: 520px;
+      margin: 0 auto 3rem;
+    }
+
+    /* INPUT SECTION */
+    .input-section {
+      max-width: 700px;
+      margin: 0 auto;
+      padding: 0 2rem;
+      position: relative;
+      z-index: 10;
+    }
+
+    .input-wrapper {
+      position: relative;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: var(--surface);
+      transition: border-color 0.2s, box-shadow 0.2s;
+      overflow: hidden;
+    }
+
+    .input-wrapper:focus-within {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 1px var(--accent), 0 0 40px rgba(200,255,0,0.08);
+    }
+
+    .input-label {
+      position: absolute;
+      top: 14px;
+      left: 16px;
+      font-size: 0.6rem;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: var(--muted);
+      pointer-events: none;
+    }
+
+    textarea {
+      width: 100%;
+      background: transparent;
+      border: none;
+      outline: none;
+      color: var(--text);
+      font-family: 'Space Mono', monospace;
+      font-size: 0.95rem;
+      padding: 40px 16px 16px;
+      resize: none;
+      min-height: 100px;
+      line-height: 1.6;
+    }
+
+    textarea::placeholder { color: var(--muted); }
+
+    .input-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 16px;
+      border-top: 1px solid var(--border);
+    }
+
+    .input-hint {
+      font-size: 0.65rem;
+      color: var(--muted);
+    }
+
+    .roast-btn {
+      background: var(--accent);
+      color: #000;
+      border: none;
+      padding: 10px 24px;
+      border-radius: 8px;
+      font-family: 'Space Mono', monospace;
+      font-size: 0.8rem;
+      font-weight: 700;
+      cursor: pointer;
+      letter-spacing: 0.05em;
+      transition: all 0.15s;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .roast-btn:hover:not(:disabled) {
+      background: #d4ff1a;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 20px rgba(200,255,0,0.3);
+    }
+
+    .roast-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .roast-btn .spinner {
+      width: 12px;
+      height: 12px;
+      border: 2px solid rgba(0,0,0,0.3);
+      border-top-color: #000;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      display: none;
+    }
+
+    .roast-btn.loading .spinner { display: block; }
+    .roast-btn.loading .btn-text { display: none; }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* RESULT */
+    .result-section {
+      max-width: 700px;
+      margin: 2.5rem auto 0;
+      padding: 0 2rem 4rem;
+      position: relative;
+      z-index: 10;
+      display: none;
+    }
+
+    .result-section.visible { display: block; }
+
+    .result-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 1rem;
+      font-size: 0.65rem;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .result-header::before, .result-header::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+
+    .result-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 2rem;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .result-box::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, var(--accent), var(--accent2));
+    }
+
+    .result-text {
+      font-size: 0.88rem;
+      line-height: 1.9;
+      color: var(--text);
+      white-space: pre-wrap;
+    }
+
+    /* Verdict color coding */
+    .result-text .verdict-rug { color: var(--red); font-weight: 700; }
+    .result-text .verdict-larp { color: var(--orange); font-weight: 700; }
+    .result-text .verdict-sus { color: var(--yellow); font-weight: 700; }
+    .result-text .verdict-legit { color: var(--green); font-weight: 700; }
+
+    .result-actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 1.5rem;
+    }
+
+    .action-btn {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      font-family: 'Space Mono', monospace;
+      font-size: 0.7rem;
+      padding: 8px 16px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.15s;
+      letter-spacing: 0.05em;
+    }
+
+    .action-btn:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    /* RECENT ROASTS */
+    .recent-section {
+      max-width: 700px;
+      margin: 0 auto;
+      padding: 0 2rem 5rem;
+      position: relative;
+      z-index: 10;
+    }
+
+    .recent-title {
+      font-size: 0.65rem;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 1rem;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .recent-title::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+
+    .recent-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .recent-tag {
+      font-size: 0.7rem;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      padding: 5px 12px;
+      border-radius: 100px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .recent-tag:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    /* CURSOR BLINK in result */
+    .blink {
+      display: inline-block;
+      width: 8px;
+      height: 14px;
+      background: var(--accent);
+      vertical-align: middle;
+      animation: blink 1s step-end infinite;
+      margin-left: 2px;
+    }
+
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0; }
+    }
+
+    @media (max-width: 600px) {
+      header { flex-direction: column; align-items: flex-start; gap: 1rem; }
+      .hero { padding: 3rem 2rem 2rem; }
+    }
+  </style>
+</head>
+<body>
+  <div class="grid-bg"></div>
+
+  <header>
+    <div class="logo">
+      <span class="logo-name">SIESTA</span>
+      <span class="logo-sub">AI Rug & LARP Detector</span>
+    </div>
+    <div class="status-pill">
+      <div class="status-dot"></div>
+      ACTIVE — v1.0
+    </div>
+  </header>
+
+  <section class="hero">
+    <p class="hero-eyebrow">Powered by pattern recognition & zero patience</p>
+    <h1>Is that project <em>real</em>,<br/>or just another rug?</h1>
+    <p>Paste a project name, token ticker, Twitter handle, or describe what you're suspicious about. SIESTA will assess it and deliver the verdict — with receipts.</p>
+  </section>
+
+  <div class="input-section">
+    <div class="input-wrapper">
+      <span class="input-label">Target Project / Token / Account</span>
+      <textarea
+        id="projectInput"
+        placeholder="e.g. $AGIX, @SomeAIProject, 'xyz.ai — decentralized AGI on Solana'..."
+        rows="3"
+      ></textarea>
+      <div class="input-footer">
+        <span class="input-hint">Name · ticker · handle · URL · description — anything works</span>
+        <button class="roast-btn" id="roastBtn" onclick="handleRoast()">
+          <div class="spinner"></div>
+          <span class="btn-text">☕ ROAST IT</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="result-section" id="resultSection">
+    <div class="result-header">SIESTA'S VERDICT</div>
+    <div class="result-box">
+      <div class="result-text" id="resultText"></div>
+    </div>
+    <div class="result-actions">
+      <button class="action-btn" onclick="copyResult()">Copy result</button>
+      <button class="action-btn" onclick="shareOnX()">Share on X</button>
+      <button class="action-btn" onclick="clearResult()">New roast</button>
+    </div>
+  </div>
+
+  <div class="recent-section" id="recentSection">
+    <div class="recent-title">Popular targets</div>
+    <div class="recent-list" id="recentList"></div>
+  </div>
+
+  <script>
+    // Config — change this to your Railway backend URL
+    const BACKEND_URL = window.BACKEND_URL || "http://localhost:3001";
+
+    const POPULAR = [
+      "$AGIX", "WorldCoin", "@elonmusk AI project", "Fetch.ai",
+      "SingularityNET", "Render Network", "Bittensor", "Numerai"
+    ];
+
+    let currentText = "";
+
+    function renderPopular() {
+      const list = document.getElementById("recentList");
+      POPULAR.forEach(name => {
+        const tag = document.createElement("button");
+        tag.className = "recent-tag";
+        tag.textContent = name;
+        tag.onclick = () => {
+          document.getElementById("projectInput").value = name;
+          handleRoast();
+        };
+        list.appendChild(tag);
+      });
+    }
+
+    async function handleRoast() {
+      const input = document.getElementById("projectInput").value.trim();
+      if (!input) return;
+
+      const btn = document.getElementById("roastBtn");
+      const resultSection = document.getElementById("resultSection");
+      const resultText = document.getElementById("resultText");
+
+      btn.disabled = true;
+      btn.classList.add("loading");
+      resultSection.classList.remove("visible");
+      currentText = "";
+      resultText.innerHTML = "";
+
+      try {
+        const response = await fetch(`${BACKEND_URL}/api/roast`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ input }),
+        });
+
+        if (!response.ok) throw new Error("Backend error");
+
+        resultSection.classList.add("visible");
+        resultSection.scrollIntoView({ behavior: "smooth", block: "nearest" });
+
+        const cursor = '<span class="blink"></span>';
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop();
+
+          for (const line of lines) {
+            if (line.startsWith("data: ")) {
+              const data = JSON.parse(line.slice(6));
+              if (data.done) {
+                resultText.innerHTML = formatResult(currentText);
+                return;
+              }
+              if (data.text) {
+                currentText += data.text;
+                resultText.innerHTML = formatResult(currentText) + cursor;
+              }
+            }
+          }
+        }
+
+        resultText.innerHTML = formatResult(currentText);
+      } catch (err) {
+        resultSection.classList.add("visible");
+        resultText.innerHTML = `<span style="color:var(--red)">Error: ${err.message}. Make sure the backend is running.</span>`;
+      } finally {
+        btn.disabled = false;
+        btn.classList.remove("loading");
+      }
+    }
+
+    function formatResult(text) {
+      return text
+        .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+        .replace(/🟥 CONFIRMED RUG/g, '<span class="verdict-rug">🟥 CONFIRMED RUG</span>')
+        .replace(/🟧 HIGH RISK LARP/g, '<span class="verdict-larp">🟧 HIGH RISK LARP</span>')
+        .replace(/🟨 SUSPICIOUS AF/g, '<span class="verdict-sus">🟨 SUSPICIOUS AF</span>')
+        .replace(/🟩 LOOKS LEGIT/g, '<span class="verdict-legit">🟩 LOOKS LEGIT</span>')
+        .replace(/---/g, '<hr style="border:none;border-top:1px solid var(--border);margin:1rem 0">');
+    }
+
+    function copyResult() {
+      navigator.clipboard.writeText(currentText);
+    }
+
+    function shareOnX() {
+      const input = document.getElementById("projectInput").value.trim();
+      const snippet = currentText.slice(0, 200).replace(/\*\*/g, "");
+      const tweet = `SIESTA just roasted ${input}:\n\n${snippet}...\n\nCheck it: ${window.location.href}`;
+      window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(tweet)}`, "_blank");
+    }
+
+    function clearResult() {
+      document.getElementById("resultSection").classList.remove("visible");
+      document.getElementById("projectInput").value = "";
+      currentText = "";
+    }
+
+    // Enter to submit
+    document.getElementById("projectInput").addEventListener("keydown", e => {
+      if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleRoast();
+    });
+
+    renderPopular();
+  </script>
+</body>
+</html>
